@@ -1,0 +1,1149 @@
+import random, os, sys
+
+#------------------------------------------------------------------------------------------------------------------------
+#--------------------------------------------------------MISC------------------------------------------------------------
+#------------------------------------------------------------------------------------------------------------------------
+
+class HiddenPrints:
+    def __enter__(self):
+        self._original_stdout = sys.stdout
+        sys.stdout = open(os.devnull, 'w')
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        sys.stdout = self._original_stdout
+
+
+#------------------------------------------------------------------------------------------------------------------------
+#--------------------------------------------------------CHARACTER-------------------------------------------------------
+#------------------------------------------------------------------------------------------------------------------------
+#Includes the player and npcs. Has name, room, hp, BAB, AC, speed, inventory, armor, weapon, take damage method, death-action.
+#Enemies have an AI and fight text.
+#Angerable means attacking it replaces it with an Enemy
+
+class Character:
+
+	def __init__(self, roomIn, name, isEnemy, maxHP, bab, pwr, ac, speed, isAngerable=True, isPlayer=False):
+		self.roomIn = roomIn
+		self.name = name
+		self.isEnemy = isEnemy
+		self.maxHP = maxHP
+		self.currHP = maxHP
+		self.bab = bab
+		self.power = pwr
+		self.ac = ac
+		self.speed = speed
+		self.isAngerable = isAngerable
+		self.isPlayer = isPlayer
+		self.inventory = []
+		self.weapon = None
+		self.armor = None
+		self.isAlive = True
+		self.talkText = "Hello there."
+		self.hostileText = "Oh goodness!"
+		self.hitText = ["Ouch.", "You took that hit like a champ.", "You didn't think that was very fun."]
+		self.missedText = ["You dodge with extreme grace.", "You do a flip over the attack like a badass.",
+		"You parry the attack twice for good measure."]
+		self.deathText = ["You died! way to go.",
+		"You got yourself killed, hotshot.",
+		"On a scale of 1-10, you're dead.",
+		"You're in a better place now."]
+		self.flirtText = [self.name + " isn't interested."]
+
+	def getRoomIn(self):
+		return self.roomIn
+
+	def setRoomIn(self, newRoom):
+		self.roomIn = newRoom
+
+	def getName(self):
+		return self.name
+
+	def setName(self, newName):
+		self.name = newName
+
+	def getIsEnemy(self):
+		return self.isEnemy
+
+	def setIsEnemy(self, isE):
+		self.isEnemy = isE
+
+	def becomeHostile(self):
+		print(self.name + " is now hostile!\n")
+		self.isEnemy = True
+		self.talkText = self.hostileText
+
+	def getMaxHP(self):
+		return self.maxHP
+
+	def setMaxHP(self, newHP):
+		self.maxHP = newHP
+
+	def getCurrHP(self):
+		return self.currHP
+
+	def setCurrHP(self, hp):
+		self.currHP = hp
+
+	def addToHP(self, amt):
+		self.currHP += amt
+
+	def healToMax(self):
+		self.currHP = self.maxHP
+
+	def getBab(self):
+		return self.bab
+
+	def setBab(self, bab):
+		self.bab = bab
+
+	def getPower(self):
+		return self.power
+
+	def setPower(self, pwr):
+		self.power = pwr
+
+	def getAc(self):
+		return self.ac
+
+	def setAc(self, ac):
+		self.ac = ac
+
+	def getSpeed(self):
+		return self.speed
+
+	def setSpeed(self, spd):
+		self.speed = spd
+
+	def getIsAngerable(self):
+		return self.isAngerable
+
+	def getIsPlayer(self):
+		return self.isPlayer
+
+	def getInventory(self):
+		return self.inventory
+
+	def pickup(self, item):
+		self.inventory.append(item)
+		item.setOwner(self)
+		item.updateOtherText()
+		self.inventory.sort(key=lambda x: x.getName())
+
+	def equipWeapon(self, weap):
+		self.weapon = weap
+		weap.setOwner(self)
+		weap.updateOtherText()
+		weap.equip()
+
+	def equipArmor(self, arm):
+		self.armor = arm
+		arm.setOwner(self)
+		arm.updateOtherText()
+		arm.equip()
+
+	def drop(self, item):
+		self.inventory.remove(item)
+
+	def getWeapon(self):
+		return self.weapon
+
+	def setWeapon(self, weapon):
+		self.weapon = weapon
+
+	def getArmor(self):
+		return self.armor
+
+	def setArmor(self, armor):
+		self.armor = armor
+
+	def getTalkText(self):
+		return self.talkText
+
+	def setTalkText(self, text):
+		self.talkText = text
+
+	def getHitText(self):
+		return self.hitText
+
+	def getMissedText(self):
+		return self.missedText
+
+	def getIsAlive(self):
+		return self.isAlive
+
+	def flirtWith(self):
+		num = int(random.random() * len(self.flirtText))
+		print(self.flirtText[num])
+
+	def attackSpecial(self, hit, other):
+		if self.weapon != None:
+			self.weapon.attackSpecial(hit, other)
+		if self.armor != None:
+			self.armor.attackSpecial(hit, other)
+
+	def defendSpecial(self, hit, other):
+		if self.weapon != None:
+			self.weapon.defendSpecial(hit, other)
+		if self.armor != None:
+			self.armor.defendSpecial(hit, other)
+
+	def attack(self, target, repeated=False):
+		if self.isPlayer:
+			print("\nYou attack " + target.getName() + " with your " + self.weapon.getName() + "!")
+			d20 = int(random.random() * 20) + 1
+			if d20 + self.bab > target.getAc():
+				damage = int(random.random() * (self.power[1] - self.power[0] + 1) + self.power[0])
+				print("Your attack deals " + str(damage) + " damage!")
+				num = random.random()*len(target.getHitText())
+				print(target.getHitText()[int(num)] + "\n")
+				target.addToHP(-1 * damage)
+				self.attackSpecial(True, target)
+				target.defendSpecial(True, self)
+				if not repeated:
+					target.resolveHP()
+			else:
+				num = random.random()*len(target.getMissedText())
+				print(target.getMissedText()[int(num)] + "\n")
+				self.attackSpecial(False, target)
+				target.defendSpecial(False, self)
+			if not target.getIsEnemy() and target.getIsAngerable() and target.getIsAlive():
+				target.becomeHostile()
+
+		else:
+			print("\n" + self.name + " attacks you with its " + self.weapon.getName() + "!")
+			d20 = int(random.random() * 20) + 1
+			if d20 + self.bab > target.getAc():
+				damage = int(random.random() * (self.power[1] - self.power[0] + 1) + self.power[0])
+				print(self.name + "'s attack deals " + str(damage) + " damage!")
+				num = random.random()*len(target.getHitText())
+				print(target.getHitText()[int(num)] + "\n")
+				target.addToHP(-1 * damage)
+				self.attackSpecial(True, target)
+				target.defendSpecial(True, self)
+				target.resolveHP()
+			else:
+				num = random.random()*len(target.getMissedText())
+				print(target.getMissedText()[int(num)] + "\n")
+				self.attackSpecial(False, target)
+				target.defendSpecial(False, self)
+
+	def resolveHP(self):
+		if self.currHP > self.maxHP:
+			self.currHP = self.maxHP
+		if self. currHP <= 0:
+			self.die()
+
+	def die(self):
+		num = random.random()*len(self.deathText)
+		print(self.deathText[int(num)] + "\n")
+		self.isAlive = False
+		for x in range(len(self.inventory)):
+			self.roomIn.addItem(self.inventory[0])
+			self.drop(self.inventory[0])
+		if self.weapon != None:
+			self.roomIn.addItem(self.weapon)
+			self.weapon.unequip()
+		if self.armor != None:
+			self.roomIn.addItem(self.armor)
+			self.armor.unequip()
+		if self in self.roomIn.getCharacters():
+			self.roomIn.removeCharacter(self)
+
+
+class GiantDevgagon(Character):
+	def __init__(self, roomIn):
+		Character.__init__(self, roomIn, "Giant Devgagon", True, 20, 2, (2, 2), 7, -2)
+		self.equipWeapon(Physics())
+		self.equipArmor(Beard())
+		self.healToMax()
+		self.talkText = "*SCREECH*"
+		self.hitText = ["The Devgagon bellows with rage!", "Your weapon is covered in blood and beard-hair.",
+		"The Devgagon says a bad word."]
+		self.missedText = ["Your attack ricochets off the Giant Devgagon's beard.",
+		"You get distracted by the Devgagaon's gorgeous beard and\nforget to finish your attack.",
+		"'Stop,' commads the Devgagon. You obey."]
+		self.deathText = ["Deafening silence. Devan falls.",
+		"The Giant Devgagon keels over and dissolves into a pool of tikka masala.",
+		"Eat plants, Devgagon!"]
+
+class Tiremoose(Character):
+	def __init__(self, roomIn):
+		Character.__init__(self, roomIn, "Tiremoose", False, 15, 0, (0, 0), 11, 1)
+		self.equipWeapon(Antlers())
+		self.talkText = "'I was a moose and I got tires and now I'm Tiremoose.'"
+		self.hostileText = "'I AM ANGRY AND I HAVE TIRES I AM TIREMOOSE.'"
+		self.hitText = ["You smell burning rubber.", "She's gonna need a new tire after that."]
+		self.missedText = ["Tiremoose is way too speedy to hit.", "Your weapon got stuck in Tiremoose's antlers."]
+		self.deathText = ["Even car-based prosthetics can't save Tiremoose now."]
+		self.flirtText = ["Tiremoose gives you a sensual 'vroom vroom'.",
+		"You caress Tiremoose's tires. Hot."]
+
+class Chest(Character):
+	def __init__(self, roomIn):
+		Character.__init__(self, roomIn, "Chest", False, 1, 0, (0, 0), 9999, 0, False)
+		self.talkText = "You talk to the Chest. It's a good listener."
+		self.hitText = ["The chest breaks open, spilling its contents into the room!"]
+		self.missedText = ["The chest breaks open, spilling its contents into the room."]
+		self.flirtText = ["Why?"]
+	def defendSpecial(self, hit, other):
+		with HiddenPrints():
+			self.die()
+
+class FlirtChest(Character):
+	def __init__(self, roomIn):
+		Character.__init__(self, roomIn, "Chest ;)", False, 1, 0, (0, 0), 9999, 0, False)
+		self.talkText = "The chest can't tell if you're interested."
+		self.hitText = ["The chest is kind of into it ;)"]
+		self.missedText = ["That wasn't very nice."]
+		self.flirtText = ["The chest blushes and, flustered, drops its contents onto the floor."]
+	def defendSpecial(self, hit, other):
+		if self.currHP < 1:
+			self.currHP = 1
+	def flirtWith(self):
+		print(self.flirtText[0])
+		with HiddenPrints():
+			self.die()
+
+
+#------------------------------------------------------------------------------------------------------------------------
+#--------------------------------------------------------ITEM------------------------------------------------------------
+#------------------------------------------------------------------------------------------------------------------------
+
+#A thing. Has a name, description, owner, use
+
+class Item:
+
+	def __init__(self, nameStr, consumable=False, conditional=False, descStr="An object"):
+		self.name = nameStr
+		self.description = descStr
+		self.owner = None
+		self.consumable = consumable
+		self.conditional = conditional
+		self.playerUseText = 'Player used'
+		self.otherUseText = 'Other used'
+
+	def getName(self):
+		return self.name
+
+	def getDescription(self):
+		return self.description
+
+	def setDescription(self, desc):
+		self.description = desc
+
+	def getOwner(self):
+		return self.owner
+
+	def setOwner(self, own):
+		self.owner = own
+
+	def getConsumable(self):
+		return self.consumable
+
+	def getConditional(self):
+		return self.conditional
+
+	def getPlayerUseText(self):
+		return self.playerUseText
+
+	def setPlayerUseText(self, text):
+		self.playerUseText = text
+
+	def getOtherUseText(self):
+		return self.otherUseText
+
+	def setOtherUseText(self, text):
+		self.otherUseText = text
+
+	def updateOtherText(self):
+		self.otherUseText = self.owner.getName() + self.otherUseText
+
+	def use(self, byPlayer):
+		return
+
+class Equippable(Item):
+	def __init__(self, name, isWeap, bab, pwr, ac, hp, spd):
+		Item.__init__(self, name, False, False)
+		self.isWeapon = isWeap
+		self.babBonus = bab
+		self.powerRange = pwr
+		self.acBonus = ac
+		self.hpBonus = hp
+		self.speedBonus = spd
+		self.playerUseText = "You equip the " + self.name + "."
+		self.otherUseText = " equips the " + self.name + "."
+
+	def equip(self):
+		self.owner.setBab(self.owner.getBab() + self.babBonus)
+		self.owner.setPower((self.owner.getPower()[0] + self.powerRange[0], self.owner.getPower()[1] + self.powerRange[1]))
+		self.owner.setAc(self.owner.getAc() + self.acBonus)
+		self.owner.setMaxHP(self.owner.getMaxHP() + self.hpBonus)
+		self.owner.setSpeed(self.owner.getSpeed() + self.speedBonus)
+		if self.isWeapon:
+			self.owner.setWeapon(self)
+		else:
+			self.owner.setArmor(self)
+		if self in self.owner.getInventory():
+			self.owner.drop(self)
+		if self.owner.getCurrHP() > self.owner.getMaxHP():
+			self.owner.setCurrHP(self.owner.getMaxHP())
+
+	def unequip(self):
+		self.owner.setBab(self.owner.getBab() - self.babBonus)
+		self.owner.setPower((self.owner.getPower()[0] - self.powerRange[0], self.owner.getPower()[1] - self.powerRange[1]))
+		self.owner.setAc(self.owner.getAc() - self.acBonus)
+		self.owner.setMaxHP(self.owner.getMaxHP() - self.hpBonus)
+		self.owner.setSpeed(self.owner.getSpeed() - self.speedBonus)
+		if self.isWeapon:
+			self.owner. setWeapon(None)
+		else:
+			self.owner.setArmor(None)
+		self.owner.pickup(self)
+		if self.owner.getCurrHP() > self.owner.getMaxHP():
+			self.owner.setCurrHP(self.owner.getMaxHP())
+
+	def attackSpecial(self, hit, other):
+		return
+
+	def defendSpecial(self, hit, other):
+		return
+
+	def use(self):
+		if self.owner != None:
+			if self.isWeapon:
+				if self.owner.getWeapon() != None:
+					self.owner.getWeapon().unequip()
+				self.equip()
+			else:
+				if self.owner.getArmor() != None:
+					self.owner.getArmor().unequip()
+				self.equip()
+			if self.owner.getIsPlayer():
+				print(self.playerUseText)
+			else:
+				print(self.otherUseText)
+
+class Sword(Equippable):
+	def __init__(self):
+		Equippable.__init__(self, "Sword", True, 3, (5, 6), 0, 0, 0)
+		self.description = "A simple short sword fer stabbin'.\nAttack +3\nPower 4-6"
+
+class Pike(Equippable):
+	def __init__(self):
+		Equippable.__init__(self, "Pike", True, 3, (3, 6), 1, 0, 0)
+		self.description = "A simple, fish-themed spear to keep enemies at a distance.\nAttack +3\nPower 3-6\nDef + 1"
+
+class PoolNoodle(Equippable):
+	def __init__(self):
+		Equippable.__init__(self, "Pool Noodle", True, -1, (1, 1), 0, 0, 0)
+		self.description = "Technically classified as a weapon.\nAttack -1\nPower 1-1"
+
+class NunchakuOfFury(Equippable):
+	def __init__(self):
+		Equippable.__init__(self, "Nunchaku of Fury", True, 5, (1, 3), 0, 0, 0)
+		self.description = "Hitting an enemy once with these badass Nunchaku allows\nyou to continue hitting them in a flurry of ninja action.\nAttack +5\nPower 1-3"
+	def attackSpecial(self, hit, other):
+		if hit and other.getCurrHP() > 0:
+			self.owner.attack(other, True)
+
+class Physics(Equippable):
+	def __init__(self):
+		Equippable.__init__(self, "Physics", True, 0, (8, 10), 0, 0, 0)
+		self.description = "The branch of science concerned with properties\nof matter and energy.\nPower 8-10"
+
+class Antlers(Equippable):
+	def __init__(self):
+		Equippable.__init__(self, "Antlers", True, 1, (5, 6), 0, 0, 0)
+		self.description = "Tiremoose's Antlers. They do not have tires.\nAttack +1\nPower 5-6"
+
+class Gambeson(Equippable):
+	def __init__(self):
+		Equippable.__init__(self, "Gambeson", False, 0, (0, 0), 2, 0, 2)
+		self.description = "A big fluffy jacket, so cozy, so cozy.\nDefense +2\nSpeed +2"
+
+class Boxplate(Equippable):
+	def __init__(self):
+		Equippable.__init__(self, "Boxplate Armor", False, 0, (0, 0), 4, 0, 0)
+		self.description = "A full suit of plate armor made from\ncardboard and duct tape.\nDefense +4"
+
+class SuperSuit(Equippable):
+	def __init__(self):
+		Equippable.__init__(self, "Super Suit", False, 0, (1, 1), 3, 0, 20)
+		self.description = "The greatest good you are ever gonna get.\nPower +1\nDefense +3\nSpeed +20"
+
+class Beard(Equippable):
+	def __init__(self):
+		Equippable.__init__(self, "Beard", False, 0, (1, 1), 4, 2, 0)
+		self.description = "A dazzling, inpenetrable crimson beard.\nPower +1\nDefense +6\nHP +2"
+
+class PlotArmor(Equippable):
+	def __init__(self):
+		Equippable.__init__(self, "Plot Armor", False, 0, (0, 0), 5, 10, 1)
+		self.description = "Wearing this armor makes you the protagonist.\nDefense +5\nHP +10\nSpeed +1"
+	def defendSpecial(self, hit, other):
+		if self.owner.getCurrHP() <= 0 and self.owner.getIsPlayer():
+			print("Your grit and determination leave you with a convenient 1 HP.")
+			self.owner.setCurrHP(1)
+		elif self.owner.getCurrHP() <= 0:
+			print(self.owner.getName() + "'s grit and determination leaves it with a conventient 1 HP.")
+			self.owner.setCurrHP(1)
+
+class HPPotion(Item):
+	def __init__(self, name, factor):
+		Item.__init__(self, name, True, False)
+		self.healingFactor = factor
+		self.description = "Heals " + str(self.healingFactor) + " HP."
+		self.playerUseText = "You drink the potion.\nYou regain " +\
+			str(self.healingFactor) + " HP!"
+		self.otherUseText =  " uses an HP potion.\nThey regain " +\
+			str(self.healingFactor) + " HP!"
+
+	def use(self):
+		if self.owner != None:
+			self.owner.addToHP(self.healingFactor)
+			self.owner.drop(self)
+			if self.owner.getIsPlayer():
+				print(self.playerUseText)
+			else:
+				print(self.otherUseText)
+			self.owner.resolveHP()
+
+class PotionOfHealing(HPPotion):
+	def __init__(self):
+		HPPotion.__init__(self, "Potion of Healing", 5)
+		self.description = "Gently heals " + str(self.healingFactor) + " HP."
+		self.playerUseText = "You carefully sip the potion. It's bubblegum flavored.\nYou regain " +\
+			str(self.healingFactor) + " HP!"
+		self.otherUseText =  " uses a Potion of Healing.\nThey regain " +\
+			str(self.healingFactor) + " HP!"
+
+class KegOfHealing(HPPotion):
+	def __init__(self):
+		HPPotion.__init__(self, "Keg of Healing", 20)
+		self.description = "Heals the living hell out of " + str(self.healingFactor) + " HP."
+		self.playerUseText = "You guzzle the potion through a hose.\nYou regain " +\
+			str(self.healingFactor) + " HP!"
+		self.otherUseText = " uses a Keg of Healing.\nThey regain " +\
+			str(self.healingFactor) + " HP!"
+
+class PotionOfHurting(HPPotion):
+	def __init__(self):
+		HPPotion.__init__(self, "Potion of Hurting", -5)
+		self.description = "Gently eviscerates " + str(-1 * self.healingFactor) + " HP."
+		self.playerUseText = "You carefully sip the potion. It's death flavored.\nYou lose " +\
+			str(-1 * self.healingFactor) + " HP!"
+		self.otherUseText = " uses a Potion of Hurting.\nThey lose " +\
+			str(-1 * self.healingFactor) + " HP!"
+
+
+
+#------------------------------------------------------------------------------------------------------------------------
+#--------------------------------------------------------ROOM------------------------------------------------------------
+#------------------------------------------------------------------------------------------------------------------------
+
+#A location in the Map. Has a text and a list of characters/searchables/takeables, and an action-taker method
+
+
+class Room:
+
+	def __init__(self):
+		self.printText = ""
+		self.printText2 = ""
+		self.characters = []
+		self.items = []
+		self.flirtables = []
+		self.attackQueue= []
+		self.northRoom = None
+		self.southRoom = None
+		self.eastRoom = None
+		self.westRoom = None
+
+	def __str__(self):
+		string = self.printText
+		for cha in self.characters:
+			if cha.getIsEnemy():
+				string += "\n" + cha.getName() + " is about to attack!"
+		return string
+
+	def getPrintText(self):
+		return self.printText
+
+	def setPrintText(self, newText):
+		self.printText = newText
+
+	def getPrintText2(self):
+		return self.printText2
+
+	def setPrintText2(self, newText):
+		self.printText2 = newText
+
+	def getCharacters(self):
+		return self.characters
+
+	def addCharacter(self, newChar):
+		self.characters.append(newChar)
+		self.flirtables.append(newChar)
+
+	def removeCharacter(self, char):
+		self.characters.remove(char)
+		self.flirtables.remove(char)
+
+	def getFlirtables(self):
+		return self.flirtables
+
+	def addFlirtables(self, newFlirt):
+		self.flirtables.append(newFlirt)
+
+	def removeFlirtables(self, flrt):
+		self.flirtables.remove(flrt)
+
+	def getItems(self):
+		return self.items
+
+	def addItem(self, newItem):
+		self.items.append(newItem)
+		self.items.sort(key=lambda x: x.getName())
+
+	def removeItem(self, item):
+		self.items.remove(item)
+
+	def clearItems(self):
+		self.items = []
+
+	def getNorthRoom(self):
+		return self.northRoom
+
+	def setNorthRoom(self, other):
+		self.northRoom = other
+		if other.getSouthRoom() != self:
+			other.setSouthRoom(self)
+
+	def getSouthRoom(self):
+		return self.southRoom
+
+	def setSouthRoom(self, other):
+		self.southRoom = other
+		if other.getNorthRoom() != self:
+			other.setNorthRoom(self)
+
+	def getEastRoom(self):
+		return self.eastRoom
+
+	def setEastRoom(self, other):
+		self.eastRoom = other
+		if other.getWestRoom() != self:
+			other.setWestRoom(self)
+
+	def getWestRoom(self):
+		return self.westRoom
+
+	def setWestRoom(self, other):
+		self.westRoom = other
+		if other.getEastRoom() != self:
+			other.setEastRoom(self)
+
+	def getAttackQueue(self):
+		return self.attackQueue
+
+	def addToAttackQueue(self, attacker, defender):
+		self.attackQueue.append((attacker, defender))
+		self.attackQueue.sort(key=lambda x: x[0].getSpeed(), reverse=True)
+
+	def loadAttackQueue(self, playerChar):
+		for char in self.characters:
+			if char.getIsEnemy():
+				self.addToAttackQueue(char, playerChar)
+
+	def resolveAttackQueue(self):
+		for atk in self.attackQueue:
+			if atk[0].getIsAlive() and atk[1].getIsAlive():
+				atk[0].attack(atk[1])
+		self.clearAttackQueue()
+
+	def clearAttackQueue(self):
+		self.attackQueue = []
+
+	def useItem(self, usedItem):
+		if not usedItem.getConditional():
+			usedItem.use()
+		else:
+			strings = ["You take the " + usedItem.getName() + " out, hold it for a bit,\nand put it away",
+			"Are you crazy?! You'll get us all killed!",
+			"Don't touch that.",
+			"You consider grabbing your " + usedItem.getName() + ", but think better of it.",
+			"You use the " + usedItem.getName() + ".\nIt's all used up, but thankfully you have another."]
+			num = random.random()*len(strings)
+			print(strings[int(num)])
+			print("")
+
+	def trigger(self):
+		return
+
+class PaperRoom(Room):
+	def __init__(self):
+		Room.__init__(self)
+		self.printText = "This room is made entirely of paper. Talk about a fire hazard."
+		self.printText2 = "You are in the paper room, which seems like a bad idea."
+		self.player = None
+		self.onFire = False
+
+	def setPlayer(self, playerChar):
+		self.player = playerChar
+
+	def useItem(self, usedItem):
+		if usedItem.getConditional() and usedItem.getName() == "Torch" and not self.onFire:
+			print("\nYou deliberately set the room on fire. That was an awful idea!\n")
+			self.printText = "This room is on fire! Aaaah!"
+			self.printText2 = "This room is on fire! Aaaah!"
+			self.onFire = True
+			self.trigger()
+		else:
+			Room.useItem(self, usedItem)
+
+	def trigger(self):
+		if self.onFire:
+			self.player.addToHP(-1)
+			print("You are burned for 1 damage!")
+			self.player.resolveHP()
+			for char in self.characters:
+				char.addToHP(-1)
+				print(char.getName() + " is burned for 1 damage!")
+				char.resolveHP()
+			print("")
+
+
+#------------------------------------------------------------------------------------------------------------------------
+#--------------------------------------------------------MAPS------------------------------------------------------------
+#------------------------------------------------------------------------------------------------------------------------
+
+#This will hold the network of Locations. has current room, go functions
+
+class GeneralMap:
+
+	def getCurrentRoom(self):
+		return self.currentRoom
+
+	def setCurrentRoom(self, newRoom):
+		self.currentRoom = newRoom
+
+	def goNorth(self):
+		if self.currentRoom.getNorthRoom() == None:
+			print("You can't go that way.\n\n")
+			return False
+		else:
+			self.currentRoom.setPrintText(self.currentRoom.getPrintText2())
+			self.currentRoom = self.currentRoom.getNorthRoom()
+			return True
+
+	def goSouth(self):
+		if self.currentRoom.getSouthRoom() is None:
+			print("You can't go that way.\n\n")
+			return False
+		else:
+			self.currentRoom.setPrintText(self.currentRoom.getPrintText2())
+			self.currentRoom = self.currentRoom.getSouthRoom()
+			return True
+
+	def goEast(self):
+		if self.currentRoom.getEastRoom() is None:
+			print("You can't go that way.\n\n")
+			return False
+		else:
+			self.currentRoom.setPrintText(self.currentRoom.getPrintText2())
+			self.currentRoom = self.currentRoom.getEastRoom()
+			return True
+
+	def goWest(self):
+		if self.currentRoom.getWestRoom() is None:
+			print("You can't go that way.\n\n")
+			return False
+		else:
+			self.currentRoom.setPrintText(self.currentRoom.getPrintText2())
+			self.currentRoom = self.currentRoom.getWestRoom()
+			return True
+
+	def passInConditionals(self):
+		return
+
+class TestMap(GeneralMap):
+	def __init__(self):
+		with HiddenPrints():
+			self.menu = Room()
+			self.menu.setPrintText("Welcome to the Main Menu! Head north to begin!")
+			self.menu.setPrintText2("Why would you come back to the menu?\n\
+There's nothing for you here.")
+
+			self.currentRoom = self.menu
+
+			self.cpuVoid = Room()
+			self.cpuVoid.setSouthRoom(self.menu)
+			self.cpuVoid.setPrintText("You emerge from the Menu into a room full of zany bottles.\n\
+To the west is the arena.\nTo the east is a room made of paper.\nTo the north is storage.")
+			self.cpuVoid.setPrintText2("You are surrounded by bottles.\n\
+To the west is the arena.\nTo the east is a room made of paper.\nTo the north is storage.")
+			self.cpuVoid.addItem(PotionOfHurting())
+			self.cpuVoid.addItem(PotionOfHurting())
+			self.cpuVoid.addItem(PotionOfHurting())
+			self.cpuVoid.addItem(PotionOfHurting())
+			self.cpuVoid.addItem(KegOfHealing())
+
+			self.arena = Room()
+			self.arena.setEastRoom(self.cpuVoid)
+			self.arena.setPrintText("You find yourself in an old timey boxing ring.")
+			self.arena.setPrintText2("Ding ding, you're in the ring.")
+			self.arena.addItem(Sword())
+			self.arena.addItem(Pike())
+			self.arena.addItem(Gambeson())
+			self.arena.addItem(Boxplate())
+			self.arena.addItem(PlotArmor())
+			self.arena.addItem(SuperSuit())
+			self.arena.addCharacter(GiantDevgagon(self.arena))
+			self.arena.addCharacter(Tiremoose(self.arena))
+			arenaSuperMoose = Tiremoose(self.arena)
+			arenaSuperMoose.equipArmor(PlotArmor())
+			arenaSuperMoose.setName("Immortal Tiremoose")
+			self.arena.addCharacter(arenaSuperMoose)
+
+			self.paperRoom = PaperRoom()
+			self.paperRoom.setWestRoom(self.cpuVoid)
+			self.paperRoom.addItem(Item("Torch", False, True, "A lit torch that's good for burning.\nUse responsibly."))
+			self.paperRoom.addItem(Item("Bag of Rice", False, True, "A sack of raw calrose rice. Mmm."))
+
+			self.storage = Room()
+			self.storage.setSouthRoom(self.cpuVoid)
+			self.storage.setPrintText("You are in a simple room with a couple of chests.")
+			self.storage.setPrintText2("You are in a simple room with a couple of chests.")
+			storageChest = Chest(self.storage)
+			storageFlirtChest = FlirtChest(self.storage)
+			self.storage.addCharacter(storageChest)
+			self.storage.addCharacter(storageFlirtChest)
+			for x in range(4):
+				storageChest.pickup(PotionOfHealing())
+			storageFlirtChest.pickup(NunchakuOfFury())
+
+	def passInConditionals(self, playerChar):
+		self.paperRoom.setPlayer(playerChar)
+		playerChar.pickup(PotionOfHealing())
+
+
+#------------------------------------------------------------------------------------------------------------------------
+#--------------------------------------------------------GAME------------------------------------------------------------
+#------------------------------------------------------------------------------------------------------------------------
+#This is what will actually play the game. It will include all possible inputs, such as
+#east, west, north, south, search, take, stats, attack, talk, look
+#inventory, use, examine, drop, mingle, flirt, help, quit
+playing = True
+
+worldMap = TestMap()
+player = Character(worldMap, "Player", False, 20, 0, (0, 0), 10, 1, False, True)
+player.equipWeapon(PoolNoodle())
+worldMap.passInConditionals(player)
+
+def east():
+	if worldMap.goEast():
+		player.setRoomIn(worldMap.getCurrentRoom())
+		worldMap.getCurrentRoom().trigger()
+
+def west():
+	if worldMap.goWest():
+		player.setRoomIn(worldMap.getCurrentRoom())
+		worldMap.getCurrentRoom().trigger()
+
+def north():
+	if worldMap.goNorth():
+		player.setRoomIn(worldMap.getCurrentRoom())
+		worldMap.getCurrentRoom().trigger()
+
+def south():
+	if worldMap.goSouth():
+		player.setRoomIn(worldMap.getCurrentRoom())
+		worldMap.getCurrentRoom().trigger()
+
+def search():
+	print("---------------------")
+	x = 1
+	if len(worldMap.getCurrentRoom().getItems()) == 0:
+		print("There's nothing here!")
+	for entry in worldMap.getCurrentRoom().getItems():
+		print(str(x) + ": " + entry.getName())
+		x += 1
+	print("---------------------\n")
+
+def take():
+	search()
+	k2 = input("Which item will you take?\nEnter a number, 'all', or 'cancel'\n")
+	if k2 == 'cancel':
+		return
+	if k2 == 'all':
+		for thing in worldMap.getCurrentRoom().getItems():
+			player.pickup(thing)
+		worldMap.getCurrentRoom().clearItems()
+		print("\n\n\n\n\nYou take everything.\n")
+		return
+	try:
+		num = int(k2)
+	except:
+		print("\n\n\n\n\nYou did something wrong, pal.\n")
+		return
+	num -= 1
+	if num >= len(worldMap.getCurrentRoom().getItems()) or num < 0:
+		print("\n\n\n\n\nThat's not a thing.\n")
+		return
+	player.pickup(worldMap.getCurrentRoom().getItems()[num])
+	print("\n\n\n\n\nYou take the " + worldMap.getCurrentRoom().getItems()[num].getName() + ".\n")
+	worldMap.getCurrentRoom().removeItem(worldMap.getCurrentRoom().getItems()[num])
+
+def stats():
+	print("HP: " + str(player.getCurrHP()) + "/" + str(player.getMaxHP()))
+	print("Atk: " + str(player.getBab()))
+	print("Pwr: " + str(player.getPower()[0]) + "-" + str(player.getPower()[1]))
+	print("Def: " + str(player.getAc()))
+	print("Spd: " + str(player.getSpeed()))
+	try:
+		print("Weapon: " + player.getWeapon().getName())
+	except:
+		print("Weapon: None")
+	try:
+		print("Armor: " + player.getArmor().getName())
+	except:
+		print("Armor: None")
+	print("\n")
+
+def look():
+	print("---------------------")
+	x = 1
+	if len(worldMap.getCurrentRoom().getCharacters()) == 0:
+		print("There's nobody here!")
+	for entry in worldMap.getCurrentRoom().getCharacters():
+		hp = ""
+		if entry.getIsEnemy():
+			hp += " " + str(entry.getCurrHP()) + "/" + str(entry.getMaxHP())
+		print(str(x) + ": " + entry.getName() + hp)
+		x += 1
+	print("---------------------\n")
+
+def attack():
+	if player.getWeapon() == None:
+		print("\nYou're unarmed!\n")
+		return
+	look()
+	k2 = input("Which character will you attack?\nEnter a number or 'cancel'\n")
+	if k2 == 'cancel':
+		return
+	try:
+		num = int(k2)
+	except:
+		print("\n\n\n\n\nYou did something wrong, pal.\n")
+		return
+	num -= 1
+	if num >= len(worldMap.getCurrentRoom().getCharacters()) or num < 0:
+		print("\n\n\n\n\nThat's not a thing.\n")
+		return
+	print("\n\n\n\n\n")
+	worldMap.getCurrentRoom().loadAttackQueue(player)
+	worldMap.getCurrentRoom().addToAttackQueue(player, worldMap.getCurrentRoom().getCharacters()[num])
+	worldMap.getCurrentRoom().resolveAttackQueue()
+	look()
+	print("HP: " + str(player.getCurrHP()) + "/" + str(player.getMaxHP()) + "\n")
+
+def talk():
+	look()
+	k2 = input("Which character will you talk to?\nEnter a number or 'cancel'\n")
+	if k2 == 'cancel':
+		return
+	try:
+		num = int(k2)
+	except:
+		print("\n\n\n\n\nYou did something wrong, pal.\n")
+		return
+	num -= 1
+	if num >= len(worldMap.getCurrentRoom().getCharacters()) or num < 0:
+		print("\n\n\n\n\nYour imaginary friend says something, you imagine.\n")
+		return
+	print("\n\n\n\n\n" + worldMap.getCurrentRoom().getCharacters()[num].getTalkText() + "\n")
+
+def inventory():
+	print("---------------------")
+	x = 1
+	if len(player.getInventory()) == 0:
+		print("You don't have anything!")
+	for entry in player.getInventory():
+		print(str(x) + ": " + entry.getName())
+		x += 1
+	print("---------------------\n")
+
+def use():
+	inventory()
+	k2 = input("Which item will you use?\nEnter a number or 'cancel'\n")
+	if k2 == 'cancel':
+		return
+	try:
+		num = int(k2)
+	except:
+		print("\n\n\n\n\nYou did something wrong, pal.\n")
+		return
+	num -= 1
+	if num >= len(player.getInventory()) or num < 0:
+		print("\n\n\n\n\nThat's not a thing.\n")
+		return
+	print("\n\n\n\n\n")
+	worldMap.getCurrentRoom().useItem(player.getInventory()[num])
+	print("\n")
+
+def examine():
+	inventory()
+	k2 = input("Which item will you examine?\nEnter a number or 'cancel'\n")
+	print("\n")
+	if k2 == 'cancel':
+		return
+	try:
+		num = int(k2)
+	except:
+		print("\n\n\n\n\nYou did something wrong, pal.\n")
+		return
+	num -= 1
+	if num >= len(player.getInventory()) or num < 0:
+		print("\n\n\n\n\nThat's not a thing.\n")
+		return
+	print("\n\n\n\n\n" + player.getInventory()[num].getName() + ": " + player.getInventory()[num].getDescription() +"\n")
+
+def drop():
+	inventory()
+	k2 = input("Which item will you drop?\nEnter a number or 'cancel'\n")
+	if k2 == 'cancel':
+		return
+	try:
+		num = int(k2)
+	except:
+		print("\n\n\n\n\nYou did something wrong, pal.\n")
+		return
+	num -= 1
+	if num >= len(player.getInventory()) or num < 0:
+		print("\n\n\n\n\nThat's not a thing.\n")
+		return
+	worldMap.getCurrentRoom().addItem(player.getInventory()[num])
+	print("\n\n\n\n\nYou drop the " + player.getInventory()[num].getName() + ".\n")
+	player.drop(player.getInventory()[num])
+
+def mingle():
+	print("---------------------")
+	x = 1
+	if len(worldMap.getCurrentRoom().getFlirtables()) == 0:
+		print("No hot singles in your area :(")
+	for entry in worldMap.getCurrentRoom().getFlirtables():
+		hp = ""
+		if entry.getIsEnemy():
+			hp += " " + str(entry.getCurrHP()) + "/" + str(entry.getMaxHP())
+		print(str(x) + ": " + entry.getName() + hp)
+		x += 1
+	print("---------------------\n")
+
+def flirt():
+	mingle()
+	k2 = input("Who are you flirting with?\nEnter a number or 'cancel'\n")
+	if k2 == 'cancel':
+		return
+	try:
+		num = int(k2)
+	except:
+		print("\n\n\n\n\nYou did something wrong, pal.\n")
+		return
+	num -= 1
+	if num >= len(worldMap.getCurrentRoom().getFlirtables()) or num < 0:
+		print("\n\n\n\n\nThat's not a thing.\n")
+		return
+	print("\n\n\n\n")
+	worldMap.getCurrentRoom().getFlirtables()[num].flirtWith()
+	print("")
+
+def help():
+	print("attack: Attack a target or open a chest\n\
+drop: Drop an item from your inventory\n\
+east: Go east\n\
+examine: Examine an item from your inventory\n\
+help: hmm.\n\
+inventory: List the items you are carrying\n\
+look: List the characters in the room\n\
+north: Go north\n\
+pause: Pause the game\n\
+quit: Quit the game\n\
+search: List the items in the room\n\
+south: Go south\n\
+stats: View your character's stats\n\
+take: Take an item from the room\n\
+talk: Talk to another character\n\
+use: Use or equip an item from your inventory\n\
+west: Go west\n")
+
+def quit():
+	k2 = input("Are you SURE about that???\ny/n\n")
+	if k2 == 'n' or k2 == 'no':
+		print("\n\nDamn straight\n\n")
+	elif k2 == 'y' or k2 == 'yes':
+		print("\n\nBye bye")
+		global playing
+		playing = False
+	else:
+		print("\n\nI'm gonna take that as a no.\nYou might want to get your eyes checked.\nAnd your fingers.\n\n")
+
+def wtf():
+	strings = ["...You do that.", "You enter the void.\nThe void looks frighteningly similar to wherever you just were.",
+	"No, thanks.", "You think you're pretty funny, don't you?", "stfu", "*Squints*",
+	"The room falls silent as the game waits\nfor a more appropriate response.", "You'd like that, wouldn't you?",
+	"Get a dictionary.", "You climb into the nearest garbage can,\nwhere you belong."]
+	num = random.random()*len(strings)
+	print(strings[int(num)])
+	print("\n")
+
+
+
+#game loop
+while playing and player.getIsAlive():
+
+	print(worldMap.getCurrentRoom())
+	key = input("\n>>Now what?\n")
+	print("\n\n\n\n\n\n\n*******************************\n\n\n\n\n\n\n" + key + "\n\n")
+	if key == 'east':
+		east()
+	elif key == 'west':
+		west()
+	elif key == 'north':
+		north()
+	elif key == 'south':
+		south()
+	elif key == 'search':
+		search()
+	elif key == 'take':
+		take()
+	elif key == 'stats':
+		stats()
+	elif key == 'attack':
+		attack()
+	elif key == 'talk':
+		talk()
+	elif key == 'look':
+		look()
+	elif key == 'inventory':
+		inventory()
+	elif key == 'use':
+		use()
+	elif key == 'examine':
+		examine()
+	elif key == 'drop':
+		drop()
+	elif key == 'mingle':
+		mingle()
+	elif key == 'flirt':
+		flirt()
+	elif key == 'pause':
+		print("You paused the game.\nTake this opportunity to recover from\nthe breakneck pace of this text adventure.\n\n\
+The game will automatically resume when you enter the next command.\n")
+	elif key == 'help':
+		help()
+	elif key == 'quit':
+		quit()
+	else:
+		wtf()
+
+if not player.getIsAlive():
+	print("***GAME OVER***")
